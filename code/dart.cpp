@@ -22,9 +22,8 @@ void detectAndDisplay(Mat frame);
 string splitFilename (string str);
 
 /** Global variables */
-String cascade_name = "data/frontalface.xml";
+String cascade_name = "data/dartcascade.xml";
 CascadeClassifier cascade;
-
 
 /** @function main */
 int main( int argc, const char** argv )
@@ -40,7 +39,7 @@ int main( int argc, const char** argv )
     return -1; 
   };
 
-	// 3. Detect Faces and Display Result
+	// 3. Detect dartboards and Display Result
 	detectAndDisplay( frame );
 
 	// 4. Save Result Image
@@ -62,7 +61,7 @@ string splitFilename (string str)
 /** @function detectAndDisplay */
 void detectAndDisplay( Mat frame )
 {
-	std::vector<Rect> faces;
+	std::vector<Rect> dartboards;
 	Mat frame_gray;
 
 	// 1. Prepare Image by turning it into Grayscale and normalising lighting
@@ -70,15 +69,15 @@ void detectAndDisplay( Mat frame )
 	equalizeHist( frame_gray, frame_gray );
 
 	// 2. Perform Viola-Jones Object Detection 
-	cascade.detectMultiScale( frame_gray, faces, 1.1, 1, 0|CV_HAAR_SCALE_IMAGE, Size(50, 50), Size(500,500) );
+	cascade.detectMultiScale( frame_gray, dartboards, 1.1, 1, 0|CV_HAAR_SCALE_IMAGE, Size(50, 50), Size(500,500) );
 
-  // 3. Print number of Faces found
-	std::cout << faces.size() << std::endl;
+  // 3. Print number of dartboards found
+	std::cout << dartboards.size() << std::endl;
 
-  // 4. Draw box around faces found
-	for( int i = 0; i < faces.size(); i++ )
+  // 4. Draw box around dartboards found
+	for( int i = 0; i < dartboards.size(); i++ )
 	{
-		rectangle(frame, Point(faces[i].x, faces[i].y), Point(faces[i].x + faces[i].width, faces[i].y + faces[i].height), Scalar( 0, 255, 0 ), 2);
+		rectangle(frame, Point(dartboards[i].x, dartboards[i].y), Point(dartboards[i].x + dartboards[i].width, dartboards[i].y + dartboards[i].height), Scalar( 0, 255, 0 ), 2);
 	}
 
 }
