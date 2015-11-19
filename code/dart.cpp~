@@ -20,7 +20,7 @@ using namespace cv;
 /** Functions in order of appearance */
 string splitFilename (string str);
 
-void detectAndDisplay(Mat frame_in, Mat &frame_out);
+void detectAndDisplay(Mat frame_in, Mat &frame_out, vector<Rect> &dartboards);
 
 void gradient (Mat &inImage, Mat &outGradMag, Mat &outGradMag_uchar, Mat &outGradDir, Mat &outGradDir_uchar);
 
@@ -34,20 +34,23 @@ void gradMag (Mat &inDx, Mat &inDy, Mat &outMag, double *min, double *max);
 
 void gradDir (Mat &inDx, Mat &inDy, Mat &outDir, double *min, double *max);
 
-void houghCircle (Mat &outDyDx_uchar, Mat &outgradDir_float, int minRad, int maxRad);
+void houghCircle (Mat &outDyDx_uchar, Mat &outgradDir, Mat &houghVis, int minRad, int maxRad);
 
 void houghLines (Mat &outGradMag_uchar, Mat &outGradDir);
+
+int filterBoxes (vector<Rect> &dartboards, Mat &frame, Mat &hough_uc, int Ts, string filename);
 
 /** Global variables */
 String cascade_name = "data/dartcascade.xml";
 CascadeClassifier cascade;
+string filename;
 
 /** MAIN Procedure */
 int main( int argc, const char** argv )
 {
   // Read Input Image and extract file name
 	Mat frame = imread(argv[1], CV_LOAD_IMAGE_COLOR);
-  string filename = splitFilename(argv[1]);
+  filename = splitFilename(argv[1]);
   Mat frame_vj;
 
 	// Load the Strong Classifier in a structure called ;ascade'
@@ -57,30 +60,66 @@ int main( int argc, const char** argv )
     return -1; 
   };
 
-	// Detect dartboards using Viola Jones and draw bounding boxes arround them
-	detectAndDisplay( frame, frame_vj );
-	imwrite( "out/" + filename + "_detected.jpg", frame );
+	
+  // Detect dartboards using Viola Jones and draw bounding boxes arround them
+  vector<Rect> dartboards;
+	detectAndDisplay( frame, frame_vj, dartboards);
  
   Mat grad_mag, grad_mag_uc;
   Mat grad_dir, grad_dir_uc;
   gradient(frame, grad_mag, grad_mag_uc, grad_dir, grad_dir_uc);
 
   int minRad = 3;
-  int maxRad = (min(frame.cols, frame.rows))/2;
-
+  int maxRad = (min(frame.cols, frame.rows))/2;  
+  Mat hough_uc;
   cout<<"Generating Hough Circle Transform"<<endl;
-  houghCircle(grad_mag_uc, grad_dir, minRad, maxRad);
+  houghCircle(grad_mag_uc, grad_dir, hough_uc, minRad, maxRad);
   cout<<"Generating Hough Line Transform"<<endl;
   houghLines(grad_mag_uc, grad_dir);
+  
 
+  int Ts = 150;
+  filterBoxes (dartboards, frame, hough_uc, Ts, filename);
 	return 0;
 }
 
+int filterBoxes (vector<Rect> &dartboards, Mat &frame, Mat &hough_uc, int Ts, string filename)
+{
+  // Draw box around dartboards found
+  bool isDart = false;
+  int count = 0; 
+	for( int i = 0; i < dartboards.size(); i++ )
+	{
+    for ( int y = dartboards[i].y; y < dartboards[i].y + dartboards[i].height; y++)
+    {
+      for ( int x = dartboards[i].x; x < dartboards[i].x + dartboards[i].width ; y++)
+      {
+        if (hough_uc.at<uchar>(y,x) > Ts)
+        {
+          isDart = true;
+          count++;
+          goto vecloop;
+        }
+      }
+    }
+    vecloop:
+    if ( isDart == true)
+    {
+      isDart = false;
+      rectangle( frame, Point(dartboards[i].x, dartboards[i].y), 
+               Point(dartboards[i].x + dartboards[i].width, 
+               dartboards[i].y + dartboards[i].height), Scalar(0, 255, 0), 2 );
+    }
+  }
+
+  imwrite( "out/" + filename + "_detected.jpg", frame );
+  return count;
+}
 
 /** @function detectAndDisplay */
-void detectAndDisplay( Mat frame_in, Mat &frame_out )
+void detectAndDisplay( Mat frame_in, Mat &frame_out, vector<Rect> &dartboards )
 {
-	std::vector<Rect> dartboards;
+	//vector<Rect> dartboards;
 	Mat frame_gray;
   frame_out.create(frame_in.size(), frame_in.type());
 
@@ -94,14 +133,6 @@ void detectAndDisplay( Mat frame_in, Mat &frame_out )
 
   // Print number of dartboards found
 	std::cout << dartboards.size() << std::endl;
-
-  // Draw box around dartboards found
-	for( int i = 0; i < dartboards.size(); i++ )
-	{
-    rectangle( frame_out, Point(dartboards[i].x, dartboards[i].y), 
-               Point(dartboards[i].x + dartboards[i].width, 
-               dartboards[i].y + dartboards[i].height), Scalar(0, 255, 0), 2 );
-	}
 }
 
 
@@ -153,7 +184,7 @@ void gradient (Mat &inImage, Mat &outGradMag, Mat &outGradMag_uchar, Mat &outGra
 
 
 //Applies and visualises a 2D Circle Hough Transform
-void houghCircle (Mat &outDyDx_uchar, Mat &outGradDir, int minRad, int maxRad) //votes' threshold parameter?
+void houghCircle (Mat &outDyDx_uchar, Mat &outGradDir, Mat &houghVis, int minRad, int maxRad) //votes' threshold parameter?
 {
   // Intiialize parameter sace dimensions
   int rD = maxRad - minRad;
@@ -176,6 +207,7 @@ void houghCircle (Mat &outDyDx_uchar, Mat &outGradDir, int minRad, int maxRad) /
     }
   }
   cout<<"hough Circle array initialized"<<endl;
+
   // Go through each pixel (y,x) in the thresholed gradient magnitude image, and 
   // consider it only if it is white (255). and
   // consider the pixels (y0,x0) in the image on the line of its gradient, and
@@ -205,8 +237,8 @@ void houghCircle (Mat &outDyDx_uchar, Mat &outGradDir, int minRad, int maxRad) /
     }
   }
   cout<<"hough Circle array populated"<<endl;
-  Mat houghVis;
   houghVis.create(outDyDx_uchar.size(), outDyDx_uchar.type());
+  int maxx = 0;  
   for ( int y0 = 0; y0 < yD; y0++ )
   {
     for( int x0 = 0; x0 < xD; x0++ )
@@ -214,20 +246,41 @@ void houghCircle (Mat &outDyDx_uchar, Mat &outGradDir, int minRad, int maxRad) /
       for ( int r = 0; r < rD; r++ )
       {
         houghVis.at<uchar>(y0,x0) += houghSpace[y0][x0][r];
-        //if( houghSpace[y0][x0][r] > 4 )
-          //cout <<"score =" << houghSpace[y0][x0][r] << "  radius =" << minRad+r <<endl;       
+        if (houghVis.at<uchar>(y0,x0) > maxx)
+          maxx = houghVis.at<uchar>(y0,x0);   
       }
     }
   }
-  imwrite("houghCircs.png", houghVis);
 
+  Point pMax;
+  for ( int y0 = 0; y0 < yD; y0++ )
+  {
+    for( int x0 = 0; x0 < xD; x0++ )
+    {
+      if ( houghVis.at<uchar>(y0,x0) == maxx)
+      {
+        pMax = Point(y0,x0);
+      }
+
+      houghVis.at<uchar>(y0,x0) = houghVis.at<uchar>(y0,x0)*255/maxx;
+/*      if ( houghVis.at<uchar>(y0,x0) < 100 )
+      {
+         houghVis.at<uchar>(y0,x0) = 0;
+      }*/
+    }
+  }
+  imwrite("houghCircs.png", houghVis);
+  
+  cout<<"max coordinates =("<<pMax.y<<","<<pMax.x<<")"<<endl;
+  //imwrite("houghCircsThresh.png", houghVis);
+  
 }
 
 //Applies and visualises a 2D line-intersection Hough Transform
 void houghLines (Mat &gradMag, Mat &gradDir)
 {
   // Intialise parameter space dimensions
-  int roD = max(gradDir.rows, gradDir.cols); 
+  int roD = (int)sqrt(gradDir.rows*gradDir.rows + gradDir.cols*gradDir.cols); 
   int thetaD = 181; //theta is between 0 - 180 degrees
 
   // Initialize parameter space dynamically on dimension variables
@@ -235,39 +288,39 @@ void houghLines (Mat &gradMag, Mat &gradDir)
   for( int ro=0; ro < roD; ro++ )
   {
     houghSpace[ro] = new int[thetaD];
-    for ( int th = 0; th < 181; th++ )
+    for ( int th = 0; th < thetaD; th++ )
     {
       houghSpace[ro][th]= 0;
     }
   }
 
   cout<<"hough Line array initialized"<<endl;
-  int max = 0;
+  //int max = 0;
   double dTheta = 5; //delta tolerance around the gradient angle
   int dirDeg; //to store the gradient direction in degrees
   for ( int y = 0; y < gradMag.rows; y++ )
 	{	
 	  for( int x = 0; x < gradMag.cols; x++ )
-		{
+	  {
       if (gradMag.at<uchar>(y,x) == 255)
       {
-        dirDeg = (int)((gradDir.at<double>(y,x) * 180) / M_PI); //convert gradient direction to degrees
+        dirDeg = (int)((gradDir.at<double>(y,x))*180/ M_PI); //convert gradient direction to degrees
         if (dirDeg < 0) dirDeg += 180;
 
-        int dTheta = 5;
+        int dTheta = 8;
         if (dirDeg < dTheta ) dirDeg = dTheta; // take care of corner cases on theta ranges below
         if (dirDeg > (thetaD - 1 - dTheta)) dirDeg = thetaD - 1 - dTheta;
 
         for ( int theta = dirDeg - dTheta; theta <= dirDeg + dTheta; theta++)
+        //for (int theta = 0; theta < thetaD; theta++)
         {
           for (int ro = 0; ro < roD; ro++)
           {
-            if ((double)(ro) <= x*cos(theta*M_PI/180) + y*sin(theta*M_PI/180) &&
-                 x*cos(theta*M_PI/180) + y*sin(theta*M_PI/180) <= (double)(ro+1)  )
+            if ( ro == (int)(x*cos(theta*M_PI/180) + y*sin(theta*M_PI/180)) )
             {
               houghSpace[ro][theta]++;
-              if (houghSpace[ro][theta] > max)
-                max = houghSpace[ro][theta];
+              //if (houghSpace[ro][theta] > max)
+                //max = houghSpace[ro][theta];                 
             }
           }
         }
@@ -281,9 +334,9 @@ void houghLines (Mat &gradMag, Mat &gradDir)
   {
     for( int x = 0; x < thetaD; x++ )
     {
-      houghVis.at<uchar>(y,x) = houghSpace[y][x]*255/max;
-      if( houghSpace[y][x] > 4 )
-      cout <<"score("<<y<<", "<<x<<")= "<< houghSpace[y][x]<<endl;       
+      houghVis.at<uchar>(y,x) = houghSpace[y][x];//*255/max;
+      //if( houghSpace[y][x] > 4 )
+      //cout <<"score("<<y<<", "<<x<<")= "<< houghSpace[y][x]<<endl;       
     }
   }
   imwrite("houghLines.png", houghVis);
@@ -444,7 +497,7 @@ void gradDir(Mat &inDx, Mat &inDy, Mat &outDir, double *min, double *max)
       double pDx = inDx.at<double>(y,x);
       double pDy = inDy.at<double>(y,x);
 
-      double val = atan2(pDx, pDy) - M_PI/2; //Fi+pi/2 in radians
+      double val = atan2(pDx, pDy) + M_PI/2; //Fi+pi/2 in radians
 
       if (val < *min)
       {
