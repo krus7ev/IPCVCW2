@@ -81,4 +81,3 @@ void detectAndDisplay( Mat frame )
 	}
 
 }
-

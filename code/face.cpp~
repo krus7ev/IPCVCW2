@@ -25,7 +25,6 @@ string splitFilename (string str);
 String cascade_name = "data/frontalface.xml";
 CascadeClassifier cascade;
 
-
 /** @function main */
 int main( int argc, const char** argv )
 {
@@ -81,5 +80,245 @@ void detectAndDisplay( Mat frame )
 		rectangle(frame, Point(faces[i].x, faces[i].y), Point(faces[i].x + faces[i].width, faces[i].y + faces[i].height), Scalar( 0, 255, 0 ), 2);
 	}
 
+
+void hough (Mat &outDyDx_uchar, Mat &outGradDir_float, int minRad, int maxRad) //votes' threshold parameter?
+{
+  int rD = maxRad - minRad;
+  int yD = outDyDx_uchar.rows;
+  int xD = outDyDx_uchar.cols;
+  int ***houghSpace;
+
+  houghSpace = new int**[yD];
+  for ( int y0 = 0; y0 < yD; y0++ )
+  {	
+    houghSpace[y0] = new int*[xD];
+    for( int x0 = 0; x0 < xD; x0++ )
+    {
+      houghSpace[y0][x0] = new int[rD];
+      for ( int r = 0; r < rD; r++ )
+      {
+        houghSpace[y0][x0][r] = 0;
+      }
+    }
+  }
+  
+  for ( int y = 0; y < yD; y++ )
+	{	
+		for( int x = 0; x < xD; x++ )
+		{
+      if (outDyDx_uchar.at<uchar>(y,x) == 255)
+      {
+        for( int x0 = 0; x0 < xD; x0++ )
+        {
+          //Find all points (y0,x0) that lie on the radius line          
+          double tanGrad = tan(outGradDir_float.at<double>(y,x) - M_PI/2);
+          int y0 = (int)(tanGrad*(x0-x) + y);
+
+          if( y0 > 0 && y0 < yD)
+          {
+            int r = (int)(sqrt((y0-y)*(y0-y) + (x0-x)*(x0-x)));
+            if (r >= minRad && r<=maxRad)
+            {
+              houghSpace[y0][x0][r-minRad] += 1;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  Mat houghVis;
+  houghVis.create(outDyDx_uchar.size(), outDyDx_uchar.type());
+  for ( int y0 = 0; y0 < yD; y0++ )
+  {	
+
+    for( int x0 = 0; x0 < xD; x0++ )
+    {
+
+      for ( int r = 0; r < rD; r++ )
+      {
+        houghVis.at<uchar>(y0,x0) += houghSpace[y0][x0][r];
+        if( houghSpace[y0][x0][r] > 4 )
+          cout <<"score =" << houghSpace[y0][x0][r] << "  radius =" << minRad+r <<endl;
+        
+      }
+    }
+  }
+  imwrite("hough.png", houghVis);
+  
 }
 
+
+void convolve(Mat &input, Mat &kernel, Mat &output, double *minSum, double *maxSum)
+{
+	// intialise the output using the input
+	output.create(input.size(), CV_64F);
+
+	// we need to create a padded version of the input
+	// or there will be border effects
+	int kernelRadiusY = ( kernel.size[0] - 1 ) / 2;
+	int kernelRadiusX = ( kernel.size[1] - 1 ) / 2;
+
+	Mat paddedInput;
+	copyMakeBorder( input, paddedInput, 
+		kernelRadiusY, kernelRadiusY, kernelRadiusX, kernelRadiusX,
+		BORDER_REPLICATE );
+
+  double convFloat[input.rows][input.cols];
+	// now we can do the convoltion
+	for ( int y = 0; y < input.rows; y++ )
+	{	
+		for( int x = 0; x < input.cols; x++ )
+		{
+			double sum = 0;
+			for( int i = -kernelRadiusY; i <= kernelRadiusY; i++ )
+			{
+				for( int j = -kernelRadiusX; j <= kernelRadiusX; j++ )
+				{
+					int kernely = i + kernelRadiusY;
+					int kernelx = j + kernelRadiusX;
+
+                    int imagey = y - i + kernelRadiusY;
+					int imagex = x - j + kernelRadiusX;
+
+					// get the values from the padded image and the kernel
+					double imageval = (double)paddedInput.at<uchar>( imagey, imagex );
+					double kernalval = kernel.at<double>( kernely, kernelx );
+
+					// do the multiplication
+					sum += imageval * kernalval;							
+				}
+			}
+			// set the output value as the sum of the convolution
+            if (sum < *minSum)
+            {
+                *minSum = sum;
+            }
+            if (sum > *maxSum)
+            {
+
+                *maxSum = sum;
+            }
+
+           output.at<double>(y,x) = sum;  			
+		}
+	}
+}
+
+
+void normalize (Mat &convFloat, Mat &output, double *minSum, double *maxSum)
+{
+    output.create(convFloat.size(), CV_8U);    
+
+    double range = *maxSum - *minSum+1;
+
+    double mMax=-1, mMin = 3000;
+
+    for ( int y = 0; y < output.rows; y++ )
+	  {	
+		for( int x = 0; x < output.cols; x++ )
+		{
+            double temp = (convFloat.at<double>(y,x) - *minSum)*255.0/range;
+            
+            if (temp > mMax)
+            {
+                mMax = temp;
+            }
+            if (temp < mMin)
+            {
+                mMin = temp;
+            }
+
+            output.at<uchar>(y, x) = (uchar)temp;
+        }
+    }
+    cout<<"\n-- "<<mMin<<' '<<mMax<<endl; 
+}
+
+
+void gradMag(Mat &inDx, Mat &inDy, Mat &outMag, double *min, double *max)
+{
+  *min = 30000.0;
+  *max = 0.0;
+
+  outMag.create( inDx.size(), inDx.type() );
+ 
+  for ( int y = 0; y < inDx.rows; y++ )
+  {	
+	  for( int x = 0; x < inDx.cols; x++ )
+	  {
+      double pDx = inDx.at<double>(y,x);
+      double pDy = inDy.at<double>(y,x);
+
+      double val = sqrt(pDx*pDx + pDy*pDy);
+
+      if (val < *min)
+      {
+          *min = val;
+      }
+      if (val > *max)
+      {
+
+          *max = val;
+      }
+      
+      outMag.at<double>(y,x) = val;
+
+    }
+  }
+}
+
+
+void threshold (Mat &input)
+{
+  for ( int y = 0; y < input.rows; y++ )
+  {	
+    for( int x = 0; x < input.cols; x++ )
+    {
+      uchar val = input.at<uchar>(y,x); 
+     
+      if(val > 85 )
+      {
+         input.at<uchar>(y,x) = 255;
+      }
+      else
+      { 
+         input.at<uchar>(y,x) = 0;
+      }    
+    }
+  }
+}
+
+
+void gradDir(Mat &inDx, Mat &inDy, Mat &outDir, double *min, double *max)
+{
+  *min = 30000.0;
+  *max = 0.0;
+
+  outDir.create( inDx.size(), CV_64F );
+
+  for ( int y = 0; y < inDx.rows; y++ )
+  {	
+    for( int x = 0; x < inDx.cols; x++ )
+    {
+      double pDx = inDx.at<double>(y,x);
+      double pDy = inDy.at<double>(y,x);
+
+      double val = atan2(pDx, pDy) - M_PI; //Fi+pi/2 in radians
+
+      if (val < *min)
+      {
+        *min = val;
+      }
+      if (val > *max)
+      {
+        *max = val;
+      }
+
+      outDir.at<double>(y,x) = val;
+    }
+  }
+}
+
+
+}
