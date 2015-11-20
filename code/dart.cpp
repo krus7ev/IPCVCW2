@@ -85,7 +85,7 @@ int main( int argc, const char** argv )
   Mat h_comb_uc;
   houghCombine (h_circ_uc, h_line_uc, h_comb_uc);
 
-  int Ts = 250;
+  int Ts = 200;
   filterBoxes (dartboards, frame, h_comb_uc, Ts, filename);
 	return 0;
 }
@@ -97,9 +97,9 @@ int filterBoxes (vector<Rect> &dartboards, Mat &frame, Mat &hough_uc, int Ts, st
   int count = 0; 
 	for( int i = 0; i < dartboards.size(); i++ )
 	{
-    for ( int y = dartboards[i].y; y < dartboards[i].y + dartboards[i].height; y++)
+    for ( int y = dartboards[i].y + (dartboards[i].height/4); y < dartboards[i].y + (dartboards[i].height * 3/4); y++)
     {
-      for ( int x = dartboards[i].x; x < dartboards[i].x + dartboards[i].width ; x++)
+      for ( int x = dartboards[i].x + (dartboards[i].width/4); x < dartboards[i].x + (dartboards[i].width * 3/4); x++)
       {
         if (hough_uc.at<uchar>(y,x) > Ts)
         {
@@ -539,7 +539,7 @@ void threshold (Mat &input)
     {
       uchar val = input.at<uchar>(y,x); 
      
-      if(val > 85 )
+      if(val > 60 )
       {
          input.at<uchar>(y,x) = 255;
       }
