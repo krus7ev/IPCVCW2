@@ -36,7 +36,9 @@ void gradDir (Mat &inDx, Mat &inDy, Mat &outDir, double *min, double *max);
 
 void houghCircle (Mat &outDyDx_uchar, Mat &outgradDir, Mat &houghVis, int minRad, int maxRad);
 
-void houghLineXY (Mat &gradMag, Mat &gradDir, Mat &hLines);
+void houghLineXY (Mat &gradMag, Mat &gradDir, Mat &houghVis);
+
+void houghCombine (Mat &hCircle, Mat &hLines, Mat &hCombined);
 
 void houghLineDA (Mat &outGradMag_uchar, Mat &outGradDir);
 
@@ -80,8 +82,11 @@ int main( int argc, const char** argv )
   //houghLineDA(grad_mag_uc, grad_dir);
   Mat h_line_uc;
   houghLineXY( grad_mag_uc, grad_dir, h_line_uc );
+  Mat h_comb_uc;
+  houghCombine (h_circ_uc, h_line_uc, h_comb_uc);
+
   int Ts = 250;
-  filterBoxes (dartboards, frame, h_circ_uc, Ts, filename);
+  filterBoxes (dartboards, frame, h_comb_uc, Ts, filename);
 	return 0;
 }
 
@@ -185,7 +190,6 @@ void gradient (Mat &inImage, Mat &outGradMag, Mat &outGradMag_uchar, Mat &outGra
   imwrite( "gradDir.png", outGradDir_uchar );
 }
 
-
 //Applies and visualises a 2D Circle Hough Transform
 void houghCircle (Mat &outDyDx_uchar, Mat &outGradDir, Mat &houghVis, int minRad, int maxRad) //votes' threshold parameter?
 {
@@ -240,7 +244,7 @@ void houghCircle (Mat &outDyDx_uchar, Mat &outGradDir, Mat &houghVis, int minRad
     }
   }
   cout<<"hough Circle array populated"<<endl;
-  houghVis.create(outDyDx_uchar.size(), outDyDx_uchar.type());
+  Mat hMat = Mat::zeros( outDyDx_uchar.size(), CV_16U); 
   int maxx = 0;  
   for ( int y0 = 0; y0 < yD; y0++ )
   {
@@ -248,47 +252,35 @@ void houghCircle (Mat &outDyDx_uchar, Mat &outGradDir, Mat &houghVis, int minRad
     {
       for ( int r = 0; r < rD; r++ )
       {
-        houghVis.at<uchar>(y0,x0) += houghSpace[y0][x0][r];
-        if (houghVis.at<uchar>(y0,x0) > maxx)
-          maxx = houghVis.at<uchar>(y0,x0);   
+        hMat.at<ushort>(y0,x0) += houghSpace[y0][x0][r];
+        if (hMat.at<ushort>(y0,x0) > maxx)
+          maxx = hMat.at<ushort>(y0,x0);   
       }
     }
   }
 
-  Point pMax;
+  houghVis.create(outDyDx_uchar.size(), outDyDx_uchar.type());
   for ( int y0 = 0; y0 < yD; y0++ )
   {
     for( int x0 = 0; x0 < xD; x0++ )
     {
-      if ( houghVis.at<uchar>(y0,x0) == maxx)
-      {
-        pMax = Point(y0,x0);
-      }
-
-      houghVis.at<uchar>(y0,x0) = houghVis.at<uchar>(y0,x0)*255/maxx;
-/*      if ( houghVis.at<uchar>(y0,x0) < 100 )
-      {
-         houghVis.at<uchar>(y0,x0) = 0;
-      }*/
+      houghVis.at<uchar>(y0,x0) = hMat.at<ushort>(y0,x0)*255/maxx;
     }
   }
-  imwrite("houghCircs.png", houghVis);
-  
-  cout<<"max coordinates =("<<pMax.y<<","<<pMax.x<<")"<<endl;
-  //imwrite("houghCircsThresh.png", houghVis);
-  
+  imwrite("houghCircs.png", houghVis);  
 }
 
 //Applies and visualises a custom 2D Line Hough Space mapped to the image plane
-void houghLineXY (Mat &gradMag, Mat &gradDir, Mat &hLines)
+void houghLineXY (Mat &gradMag, Mat &gradDir, Mat &houghVis)
 {
   // Initialize parameter space
-  hLines = Mat::zeros( gradMag.size(), CV_8U);
+  Mat hLines = Mat::zeros( gradMag.size(), CV_16U);
 
   cout<<"hough Circle array initialized"<<endl;
 
   int yD = hLines.rows;
   int xD = hLines.cols;
+  int max = 0;
   for ( int y = 0; y < yD; y++ )
   {	
 	  for( int x = 0; x < xD; x++ )
@@ -302,28 +294,53 @@ void houghLineXY (Mat &gradMag, Mat &gradDir, Mat &hLines)
           
           if( y0 > 0 && y0 < yD)
           {
-            hLines.at<uchar>(y0,x0)++;
+            hLines.at<ushort>(y0,x0)++;
+            if ( hLines.at<ushort>(y0,x0) > max)
+              max = hLines.at<ushort>(y0,x0);
           }
         }
       }
     }
   }
   cout<<"hough Line array populated"<<endl;
-  Mat houghVis(hLines.size(), CV_8U); 
+  houghVis.create(hLines.size(), CV_8U); 
   for ( int y0 = 0; y0 < yD; y0++ )
   {
     for( int x0 = 0; x0 < xD; x0++ )
     {
-      houghVis.at<uchar>(y0,x0) = hLines.at<ushort>(y0,x0);
+      houghVis.at<uchar>(y0,x0) = hLines.at<ushort>(y0,x0)*255/max;
     }
   }
-  imwrite("hLines.png", hLines);  
+  imwrite("hLines.png", houghVis);  
 }
 
-
-void houghCombine ( Mat &hCircle, Mat &houghLines, Mat hCombined)
+void houghCombine (Mat &hCircle, Mat &hLines, Mat &hCombined)
 {
+  int yD = hLines.rows;
+  int xD = hLines.cols;
+  Mat hMat(hLines.size(), CV_16U);
+  int max = 0; 
+  for ( int y0 = 0; y0 < yD; y0++ )
+  {
+    for( int x0 = 0; x0 < xD; x0++ )
+    {
+      hMat.at<ushort>(y0,x0) = hLines.at<uchar>(y0,x0) + hCircle.at<uchar>(y0,x0);
+      if(hMat.at<ushort>(y0,x0) > max)
+        max = hMat.at<ushort>(y0,x0);
+    }
+  }
 
+  hCombined.create(hLines.size(), CV_8U);
+
+  for ( int y0 = 0; y0 < yD; y0++ )
+  {
+    for( int x0 = 0; x0 < xD; x0++ )
+    {
+      hCombined.at<uchar>(y0,x0) = hMat.at<ushort>(y0,x0)*255/max;
+    }
+  }
+
+  imwrite("hCombined.png", hCombined);  
 }
 
 //Applies and visualises a 2D Distance-Angle Line Hough Transform
