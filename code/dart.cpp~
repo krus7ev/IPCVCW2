@@ -36,7 +36,9 @@ void gradDir (Mat &inDx, Mat &inDy, Mat &outDir, double *min, double *max);
 
 void houghCircle (Mat &outDyDx_uchar, Mat &outgradDir, Mat &houghVis, int minRad, int maxRad);
 
-void houghLines (Mat &outGradMag_uchar, Mat &outGradDir);
+void houghLineXY (Mat &gradMag, Mat &gradDir, Mat &hLines);
+
+void houghLineDA (Mat &outGradMag_uchar, Mat &outGradDir);
 
 int filterBoxes (vector<Rect> &dartboards, Mat &frame, Mat &hough_uc, int Ts, string filename);
 
@@ -71,15 +73,15 @@ int main( int argc, const char** argv )
 
   int minRad = 3;
   int maxRad = (min(frame.cols, frame.rows))/2;  
-  Mat hough_uc;
+  Mat h_circ_uc;
   cout<<"Generating Hough Circle Transform"<<endl;
-  houghCircle(grad_mag_uc, grad_dir, hough_uc, minRad, maxRad);
+  houghCircle(grad_mag_uc, grad_dir, h_circ_uc, minRad, maxRad);
   cout<<"Generating Hough Line Transform"<<endl;
-  houghLines(grad_mag_uc, grad_dir);
-  
-
-  int Ts = 150;
-  filterBoxes (dartboards, frame, hough_uc, Ts, filename);
+  //houghLineDA(grad_mag_uc, grad_dir);
+  Mat h_line_uc;
+  houghLineXY( grad_mag_uc, grad_dir, h_line_uc );
+  int Ts = 250;
+  filterBoxes (dartboards, frame, h_circ_uc, Ts, filename);
 	return 0;
 }
 
@@ -92,7 +94,7 @@ int filterBoxes (vector<Rect> &dartboards, Mat &frame, Mat &hough_uc, int Ts, st
 	{
     for ( int y = dartboards[i].y; y < dartboards[i].y + dartboards[i].height; y++)
     {
-      for ( int x = dartboards[i].x; x < dartboards[i].x + dartboards[i].width ; y++)
+      for ( int x = dartboards[i].x; x < dartboards[i].x + dartboards[i].width ; x++)
       {
         if (hough_uc.at<uchar>(y,x) > Ts)
         {
@@ -113,6 +115,7 @@ int filterBoxes (vector<Rect> &dartboards, Mat &frame, Mat &hough_uc, int Ts, st
   }
 
   imwrite( "out/" + filename + "_detected.jpg", frame );
+  cout<<"filtered count: "<<count<<endl;
   return count;
 }
 
@@ -276,8 +279,55 @@ void houghCircle (Mat &outDyDx_uchar, Mat &outGradDir, Mat &houghVis, int minRad
   
 }
 
-//Applies and visualises a 2D line-intersection Hough Transform
-void houghLines (Mat &gradMag, Mat &gradDir)
+//Applies and visualises a custom 2D Line Hough Space mapped to the image plane
+void houghLineXY (Mat &gradMag, Mat &gradDir, Mat &hLines)
+{
+  // Initialize parameter space
+  hLines = Mat::zeros( gradMag.size(), CV_8U);
+
+  cout<<"hough Circle array initialized"<<endl;
+
+  int yD = hLines.rows;
+  int xD = hLines.cols;
+  for ( int y = 0; y < yD; y++ )
+  {	
+	  for( int x = 0; x < xD; x++ )
+	  {
+      if (gradMag.at<uchar>(y,x) == 255)
+      {
+        for( int x0 = 0; x0 < xD; x0++ )
+        {      
+          double tanGrad = tan(gradDir.at<double>(y,x));
+          int y0 = (int)(tanGrad*(x0-x) + y); //make some magic
+          
+          if( y0 > 0 && y0 < yD)
+          {
+            hLines.at<uchar>(y0,x0)++;
+          }
+        }
+      }
+    }
+  }
+  cout<<"hough Line array populated"<<endl;
+  Mat houghVis(hLines.size(), CV_8U); 
+  for ( int y0 = 0; y0 < yD; y0++ )
+  {
+    for( int x0 = 0; x0 < xD; x0++ )
+    {
+      houghVis.at<uchar>(y0,x0) = hLines.at<ushort>(y0,x0);
+    }
+  }
+  imwrite("hLines.png", hLines);  
+}
+
+
+void houghCombine ( Mat &hCircle, Mat &houghLines, Mat hCombined)
+{
+
+}
+
+//Applies and visualises a 2D Distance-Angle Line Hough Transform
+void houghLineDA (Mat &gradMag, Mat &gradDir)
 {
   // Intialise parameter space dimensions
   int roD = (int)sqrt(gradDir.rows*gradDir.rows + gradDir.cols*gradDir.cols); 
@@ -341,6 +391,8 @@ void houghLines (Mat &gradMag, Mat &gradDir)
   }
   imwrite("houghLines.png", houghVis);
 }
+
+
 
 void convolve(Mat &input, Mat &kernel, Mat &output, double *minSum, double *maxSum)
 {
