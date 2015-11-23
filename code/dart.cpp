@@ -94,16 +94,16 @@ int main(int argc, const char** argv)
   int maxRad =(min(frame.cols, frame.rows))/2;
     
   Mat h_circ_uc;
-  cout<<"\nGenerating Hough Circle Transform..."<<endl;
+  cout << "\nGenerating Hough Circle Transform..." << endl;
   houghCircle(grad_mag_uc, grad_dir, h_circ_uc, minRad, maxRad);
   
   Mat h_line_uc;
-  cout<<"\nGenerating Hough Line Transform..."<<endl;
+  cout << "Generating Hough Line Transform..." << endl;
   //houghLineDA(grad_mag_uc, grad_dir);
   houghLineXY(grad_mag_uc, grad_dir, h_line_uc);
   
   Mat h_comb_uc;
-  cout<<"\nGenerating Hough Combined Transform..."<<endl;
+  cout << "Generating Hough Combined Transform..." << endl;
   houghCombine(h_circ_uc, h_line_uc, h_comb_uc);
 
   int Ts = 200;
@@ -150,7 +150,7 @@ int filterBoxes(vector<Rect> &dartboards, Mat &frame, Mat &hough_uc,
   }
    
   imwrite("out/" + filename + "_detected.jpg", frame);
-  cout << "Filtered count: " << count << "\n" << endl;
+  cout << "\nFiltered count: " << count << "\n" << endl;
   
   return count;
 }
@@ -210,7 +210,6 @@ void gradient(Mat &inImage, Mat &outGradMag, Mat &outGradMag_uchar,
   
   convolve(grayImage, sobelDx, outDfDx_float, &minVal, &maxVal);
   normalise(outDfDx_float, outDfDx_uchar, &minVal, &maxVal); 
-  
   imwrite("DfDx.png", outDfDx_uchar); 
 
   // Compute derivative with respect to Y by convolving with 
@@ -220,20 +219,17 @@ void gradient(Mat &inImage, Mat &outGradMag, Mat &outGradMag_uchar,
   
   convolve(grayImage, sobelDy, outDfDy_float, &minVal, &maxVal);
   normalise(outDfDy_float, outDfDy_uchar, &minVal, &maxVal); 
-  
   imwrite("DfDy.png", outDfDy_uchar);
 
   // Compute derivative with respect to(X,Y) - gradient magnitude
   gradMag(outDfDx_float, outDfDy_float, outGradMag, &minVal, &maxVal);
   normalise(outGradMag, outGradMag_uchar, &minVal, &maxVal);   
   threshold(outGradMag_uchar);
-  
   imwrite("gradMag.png", outGradMag_uchar);
 
   // Compute gradient direction
   gradDir(outDfDx_float, outDfDy_float, outGradDir, &minVal, &maxVal);
   normalise(outGradDir, outGradDir_uchar, &minVal, &maxVal);
-  
   imwrite("gradDir.png", outGradDir_uchar);
 }
 
@@ -268,7 +264,7 @@ void houghCircle(Mat &outDyDx_uchar, Mat &outGradDir, Mat &houghVis,
     }
   }
   
-  cout<<"Hough Circle array initialized."<<endl;
+  cout << "Hough Circle array initialised." << endl;
 
   // Go through each pixel(y,x) in the thresholed gradient magnitude image, and 
   // consider it only if it is white(255), and
@@ -300,7 +296,7 @@ void houghCircle(Mat &outDyDx_uchar, Mat &outGradDir, Mat &houghVis,
     }
   }
   
-  cout<<"Hough Circle array populated."<<endl;
+  cout << "Hough Circle array populated." << endl;
   
   Mat hMat = Mat::zeros(outDyDx_uchar.size(), CV_16U); 
   int maxx = 0; 
@@ -327,7 +323,7 @@ void houghCircle(Mat &outDyDx_uchar, Mat &outGradDir, Mat &houghVis,
   {
     for(int x0 = 0; x0 < xD; x0++)
     {
-      houghVis.at<uchar>(y0,x0) = hMat.at<ushort>(y0,x0)*255/maxx;
+      houghVis.at<uchar>(y0,x0) = hMat.at<ushort>(y0,x0) * 255 / maxx;
     }
   }
   
@@ -343,7 +339,7 @@ void houghLineXY(Mat &gradMag, Mat &gradDir, Mat &houghVis)
   // Initialize parameter space
   Mat hLines = Mat::zeros(gradMag.size(), CV_16U);
 
-  cout<<"Hough Line array initialized."<<endl;
+  cout << "Hough Line array initialised." << endl;
 
   int yD = hLines.rows;
   int xD = hLines.cols;
@@ -374,7 +370,7 @@ void houghLineXY(Mat &gradMag, Mat &gradDir, Mat &houghVis)
     }
   }
   
-  cout<<"Hough Line array populated."<<endl;
+  cout << "Hough Line array populated." << endl;
   
   houghVis.create(hLines.size(), CV_8U); 
   
@@ -382,7 +378,7 @@ void houghLineXY(Mat &gradMag, Mat &gradDir, Mat &houghVis)
   {
     for(int x0 = 0; x0 < xD; x0++)
     {
-      houghVis.at<uchar>(y0,x0) = hLines.at<ushort>(y0,x0)*255/max;
+      houghVis.at<uchar>(y0,x0) = hLines.at<ushort>(y0,x0) * 255 / max;
     }
   }
   
@@ -396,7 +392,7 @@ void houghCombine(Mat &hCircle, Mat &hLines, Mat &hCombined)
 {
   Mat hMat(hLines.size(), CV_16U);
   
-  cout<<"Hough Combined array initialized."<<endl;
+  cout << "Hough Combined array initialised." << endl;
 
   int yD = hLines.rows;
   int xD = hLines.cols;
@@ -416,7 +412,7 @@ void houghCombine(Mat &hCircle, Mat &hLines, Mat &hCombined)
     }
   }
   
-  cout<<"Hough Combined array populated."<<endl;
+  cout << "Hough Combined array populated." << endl;
   
   hCombined.create(hLines.size(), CV_8U);
 
@@ -454,7 +450,7 @@ void houghLineDA(Mat &gradMag, Mat &gradDir)
     }
   }
 
-  cout<<"Hough Line array initialized."<<endl;
+  cout << "Hough Line array initialised." << endl;
   //int max = 0;
   double dTheta = 5; //delta tolerance around the gradient angle
   int dirDeg; //to store the gradient direction in degrees
@@ -501,7 +497,7 @@ void houghLineDA(Mat &gradMag, Mat &gradDir)
     }
   }
   
-  cout<<"Hough Line array populated."<<endl;
+  cout << "Hough Line array populated." << endl;
   
   Mat houghVis;
   houghVis.create(roD, thetaD, CV_8U);
@@ -514,7 +510,7 @@ void houghLineDA(Mat &gradMag, Mat &gradDir)
       
       //if(houghSpace[y][x] > 4)
       //{
-      //  cout <<"score("<<y<<", "<<x<<")= "<< houghSpace[y][x]<<endl;   
+      //  cout <<"score("<<y<<", "<<x<<")= "<< houghSpace[y][x] << endl;   
       //}    
     }
   }
@@ -600,7 +596,7 @@ void normalise(Mat &convFloat, Mat &output, double *minSum, double *maxSum)
   {	
 	  for(int x = 0; x < output.cols; x++)
 	  {
-      double temp =(convFloat.at<double>(y,x) - *minSum)*255.0/range;
+      double temp =(convFloat.at<double>(y,x) - *minSum) * 255.0 / range;
       
       if(temp > mMax)
       {
@@ -664,7 +660,8 @@ void threshold(Mat &input)
     {
       uchar val = input.at<uchar>(y,x); 
      
-      if(val > 60)
+      // val = 60     
+      if(val > 40)
       {
          input.at<uchar>(y,x) = 255;
       }
