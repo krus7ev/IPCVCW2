@@ -106,7 +106,7 @@ int main(int argc, const char** argv)
   cout << "Generating Hough Combined Transform..." << endl;
   houghCombine(h_circ_uc, h_line_uc, h_comb_uc);
 
-  int Ts = 200;
+  int Ts = 80;
   filterBoxes(dartboards, frame, h_comb_uc, Ts, filename);
   
 	return 0;
@@ -264,7 +264,7 @@ void houghCircle(Mat &outDyDx_uchar, Mat &outGradDir, Mat &houghVis,
     }
   }
   
-  cout << "Hough Circle array initialized." << endl;
+  cout << "Hough Circle array initialised." << endl;
 
   // Go through each pixel(y,x) in the thresholed gradient magnitude image, and 
   // consider it only if it is white(255), and
@@ -339,7 +339,7 @@ void houghLineXY(Mat &gradMag, Mat &gradDir, Mat &houghVis)
   // Initialize parameter space
   Mat hLines = Mat::zeros(gradMag.size(), CV_16U);
 
-  cout << "Hough Line array initialized." << endl;
+  cout << "Hough Line array initialised." << endl;
 
   int yD = hLines.rows;
   int xD = hLines.cols;
@@ -392,7 +392,7 @@ void houghCombine(Mat &hCircle, Mat &hLines, Mat &hCombined)
 {
   Mat hMat(hLines.size(), CV_16U);
   
-  cout << "Hough Combined array initialized." << endl;
+  cout << "Hough Combined array initialised." << endl;
 
   int yD = hLines.rows;
   int xD = hLines.cols;
@@ -450,7 +450,7 @@ void houghLineDA(Mat &gradMag, Mat &gradDir)
     }
   }
 
-  cout << "Hough Line array initialized." << endl;
+  cout << "Hough Line array initialised." << endl;
   //int max = 0;
   double dTheta = 5; //delta tolerance around the gradient angle
   int dirDeg; //to store the gradient direction in degrees
@@ -590,7 +590,7 @@ void normalise(Mat &convFloat, Mat &output, double *minSum, double *maxSum)
   output.create(convFloat.size(), CV_8U);    
 
   double range = *maxSum - *minSum+1;
-  double mMax=-1, mMin = 3000;
+  double mMax = -1, mMin = 3000;
 
   for(int y = 0; y < output.rows; y++)
   {	

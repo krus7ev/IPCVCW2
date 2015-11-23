@@ -590,7 +590,7 @@ void normalise(Mat &convFloat, Mat &output, double *minSum, double *maxSum)
   output.create(convFloat.size(), CV_8U);    
 
   double range = *maxSum - *minSum+1;
-  double mMax=-1, mMin = 3000;
+  double mMax = -1, mMin = 3000;
 
   for(int y = 0; y < output.rows; y++)
   {	
