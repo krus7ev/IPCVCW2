@@ -53,7 +53,9 @@ void houghCombine(Mat &hCircle, Mat &hLines, Mat &hCombined);
 
 void houghLineDA(Mat &outGradMag_uchar, Mat &outGradDir);
 
-int filterBoxes(vector<Rect> &dartboards, Mat &frame, Mat &hough_uc, int Ts, 
+int * weighBoxes(vector<Rect> &dartboards, Mat &hough_line, Mat &hough_circ);
+
+void filterBoxes(vector<Rect> &dartboards, int *votes, int Ts, Mat &frame, 
   string filename);
 
 string splitFilename(string str);
@@ -93,9 +95,9 @@ int main(int argc, const char** argv)
   int minRad = 3;
   int maxRad =(min(frame.cols, frame.rows)) / 2;
     
-  //Mat h_circ_uc;
-  //cout << "\nGenerating Hough Circle Transform..." << endl;
-  //houghCircle(grad_mag_uc, grad_dir, h_circ_uc, minRad, maxRad);
+  Mat h_circ_uc;
+  cout << "\nGenerating Hough Circle Transform..." << endl;
+  houghCircle(grad_mag_uc, grad_dir, h_circ_uc, minRad, maxRad);
   
   //Mat h_circ_blur;
   //bilateralFilter(h_circ_uc, h_circ_blur, 9, 200, 200);
@@ -106,58 +108,87 @@ int main(int argc, const char** argv)
   //houghLineDA(grad_mag_uc, grad_dir);
   houghLineXY(grad_mag_uc, grad_dir, h_line_uc);
   
+  /*double kernelHP[3][3]= {
+    {-1, -1, -1},
+    {-1, 16, -1},
+    {-1, -1, -1}};
+    
+  Mat highPass(3,3, CV_64F, kernelHP);
+  Mat linesHP_float;
+  Mat linesHP_uchar;
+  double min = 30000.0; double max = 0.0;
+
+  convolve(h_line_uc, highPass, linesHP_float, &min, &max);
+  normalise(linesHP_float, linesHP_uchar, &min, &max); 
+  imwrite("linesHHP.png", linesHP_uchar); 
+   */
+
   //Mat h_comb_uc;
   //cout << "Generating Hough Combined Transform..." << endl;
   //houghCombine(h_circ_uc, h_line_uc, h_comb_uc);
 
-  int Ts = 50;
-  //filterBoxes(dartboards, frame, h_comb_uc, Ts, filename);
-  filterBoxes(dartboards, frame, h_line_uc, Ts, filename);
+  int Ts = 200;
+  int *votes;
+  votes = weighBoxes(dartboards, h_line_uc, h_circ_uc);
+  filterBoxes(dartboards, votes, Ts, frame, filename);
   
 	return 0;
 }
 
 // ----------------------------------------------------------------------------
 
-/** @function filterBoxes */
-int filterBoxes(vector<Rect> &dartboards, Mat &frame, Mat &hough_uc, 
-  int Ts, string filename)
+void filterBoxes(vector<Rect> &dartboards, int *votes, int Ts, Mat &frame, 
+  string filename)
+{
+  int count = 0;
+  for(int i = 0; i < dartboards.size(); i++) 
+  {
+    if(votes[i] > Ts)
+    {
+      rectangle(frame, Point(dartboards[i].x, dartboards[i].y), 
+        Point(dartboards[i].x + dartboards[i].width, 
+        dartboards[i].y + dartboards[i].height), Scalar(0, 255, 0), 2);
+      count++;
+    }
+  }
+  imwrite("out/" + filename + "_detected.jpg", frame);
+  cout << "\nFiltered count: " << count << "\n" << endl;
+
+}
+// ----------------------------------------------------------------------------
+
+/** @function weighBoxes */
+int * weighBoxes(vector<Rect> &dartboards, Mat &hough_line, Mat &hough_circ)
 {
   // Draw box around dartboards found
-  bool isDart = false;
-  int count = 0; 
+  //bool isDart = false;
+  //int count = 0;
+  int votes[dartboards.size()];
+  int avgCirc = 0;
+  int maxLine = 0;
+  int weightCirc = 1;
+  int weightLine = 5;
+  int pixNum = 0; 
   
 	for(int i = 0; i < dartboards.size(); i++)
 	{
+    pixNum = (dartboards[i].height*dartboards[i].width)/16; //central ninth of box
     for(int y = dartboards[i].y +(dartboards[i].height/4); y < dartboards[i].y 
       +(dartboards[i].height * 3/4); y++)
     {
       for(int x = dartboards[i].x +(dartboards[i].width/4); x < dartboards[i].x
         +(dartboards[i].width * 3/4); x++)
       {
-        if(hough_uc.at<uchar>(y,x) > Ts)
-        {
-          isDart = true;
-          count++;
-          goto vecloop;
-        }
+        if(maxLine < hough_line.at<uchar>(y,x) )
+          maxLine = hough_line.at<uchar>(y,x);
+        avgCirc += hough_circ.at<uchar>(y,x);
       }
     }
-    vecloop:
-    
-    if(isDart == true)
-    {
-      isDart = false;
-      rectangle(frame, Point(dartboards[i].x, dartboards[i].y), 
-               Point(dartboards[i].x + dartboards[i].width, 
-               dartboards[i].y + dartboards[i].height), Scalar(0, 255, 0), 2);
-    }
+    avgCirc = avgCirc/pixNum;
+    votes[i] = (maxLine*weightLine + avgCirc*weightCirc)/(weightCirc + weightLine);
   }
-   
-  imwrite("out/" + filename + "_detected.jpg", frame);
-  cout << "\nFiltered count: " << count << "\n" << endl;
-  
-  return count;
+      
+  return votes;
 }
 
 // ----------------------------------------------------------------------------
