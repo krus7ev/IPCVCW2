@@ -127,7 +127,7 @@ int main(int argc, const char** argv)
   //cout << "Generating Hough Combined Transform..." << endl;
   //houghCombine(h_circ_uc, h_line_uc, h_comb_uc);
 
-  int Ts = 200;
+  int Ts = 150;
   int votes[dartboards.size()];
   weighBoxes(dartboards, votes, h_line_uc, h_circ_uc);
   filterBoxes(dartboards, votes, Ts, frame, filename);
@@ -149,8 +149,9 @@ void filterBoxes(vector<Rect> &dartboards, int votes[], int Ts, Mat &frame,
         Point(dartboards[i].x + dartboards[i].width, 
         dartboards[i].y + dartboards[i].height), Scalar(0, 255, 0), 2);
       count++;
-      cout << "voteofbox " << votes[i] <<endl;
+      
     }
+    cout << "voteofbox " << votes[i] <<endl;
   }
   imwrite("out/" + filename + "_detected.jpg", frame);
   cout << "\nFiltered count: " << count << "\n" << endl;
@@ -164,15 +165,15 @@ void weighBoxes(vector<Rect> &dartboards, int votes[], Mat &hough_line, Mat &hou
   // Draw box around dartboards found
   //bool isDart = false;
   //int count = 0;
-  int maxCirc = 0;
+  int avgCirc = 0;
   int maxLine = 0;
-  int weightCirc = 1;
-  int weightLine = 1;
+  int weightCirc = 2;
+  int weightLine = 3;
   int pixNum = 0; 
   
 	for(int i = 0; i < dartboards.size(); i++)
 	{
-    pixNum = (dartboards[i].height*dartboards[i].width)/16; //central ninth of box
+    pixNum = (dartboards[i].height*dartboards[i].width)/4; //central ninth of box
     for(int y = dartboards[i].y +(dartboards[i].height/4); y < dartboards[i].y 
       +(dartboards[i].height * 3/4); y++)
     {
@@ -181,14 +182,14 @@ void weighBoxes(vector<Rect> &dartboards, int votes[], Mat &hough_line, Mat &hou
       {
         if(maxLine < hough_line.at<uchar>(y,x) )
           maxLine = hough_line.at<uchar>(y,x);
-        if(maxCirc < hough_circ.at<uchar>(y,x) )
-          maxCirc = hough_circ.at<uchar>(y,x);
-        //avgCirc += hough_circ.at<uchar>(y,x);
+        //if(maxCirc < hough_circ.at<uchar>(y,x) )
+          //maxCirc = hough_circ.at<uchar>(y,x);
+        avgCirc += hough_circ.at<uchar>(y,x);
       }
     }
-    //avgCirc = avgCirc/pixNum;
-    votes[i] = (maxLine*weightLine + maxCirc*weightCirc)/(weightCirc + weightLine);
-    maxCirc = 0;
+    avgCirc = avgCirc/pixNum;
+    votes[i] = (maxLine*weightLine + avgCirc*weightCirc)/(weightCirc + weightLine);
+    avgCirc = 0;
     maxLine = 0;
   }
 }
