@@ -91,23 +91,28 @@ int main(int argc, const char** argv)
   gradient(frame, grad_mag, grad_mag_uc, grad_dir, grad_dir_uc);
 
   int minRad = 3;
-  int maxRad =(min(frame.cols, frame.rows))/2;
+  int maxRad =(min(frame.cols, frame.rows)) / 2;
     
-  Mat h_circ_uc;
-  cout << "\nGenerating Hough Circle Transform..." << endl;
-  houghCircle(grad_mag_uc, grad_dir, h_circ_uc, minRad, maxRad);
+  //Mat h_circ_uc;
+  //cout << "\nGenerating Hough Circle Transform..." << endl;
+  //houghCircle(grad_mag_uc, grad_dir, h_circ_uc, minRad, maxRad);
+  
+  //Mat h_circ_blur;
+  //bilateralFilter(h_circ_uc, h_circ_blur, 9, 200, 200);
+  //imwrite("bluredHoughCirc.png", h_circ_blur); 
   
   Mat h_line_uc;
   cout << "Generating Hough Line Transform..." << endl;
   //houghLineDA(grad_mag_uc, grad_dir);
   houghLineXY(grad_mag_uc, grad_dir, h_line_uc);
   
-  Mat h_comb_uc;
-  cout << "Generating Hough Combined Transform..." << endl;
-  houghCombine(h_circ_uc, h_line_uc, h_comb_uc);
+  //Mat h_comb_uc;
+  //cout << "Generating Hough Combined Transform..." << endl;
+  //houghCombine(h_circ_uc, h_line_uc, h_comb_uc);
 
-  int Ts = 200;
-  filterBoxes(dartboards, frame, h_comb_uc, Ts, filename);
+  int Ts = 50;
+  //filterBoxes(dartboards, frame, h_comb_uc, Ts, filename);
+  filterBoxes(dartboards, frame, h_line_uc, Ts, filename);
   
 	return 0;
 }
@@ -286,7 +291,7 @@ void houghCircle(Mat &outDyDx_uchar, Mat &outGradDir, Mat &houghVis,
           {
             int r =(int)(sqrt((y0-y)*(y0-y) +(x0-x)*(x0-x)));
             
-            if(r >= minRad && r<=maxRad)
+            if(r >= minRad && r <= maxRad)
             {
               houghSpace[y0][x0][r-minRad] += 1;
             }
