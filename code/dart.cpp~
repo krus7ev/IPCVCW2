@@ -53,7 +53,8 @@ void houghCombine(Mat &hCircle, Mat &hLines, Mat &hCombined);
 
 void houghLineDA(Mat &outGradMag_uchar, Mat &outGradDir);
 
-void weighBoxes(vector<Rect> &dartboards, int *votes, Mat &hough_line, Mat &hough_circ);
+void weighBoxes(vector<Rect> &dartboards, int *votes, Mat &hough_line, 
+  Mat &hough_circ);
 
 void filterBoxes(vector<Rect> &dartboards, int *votes, int Ts, Mat &frame, 
   string filename);
@@ -127,7 +128,7 @@ int main(int argc, const char** argv)
   //cout << "Generating Hough Combined Transform..." << endl;
   //houghCombine(h_circ_uc, h_line_uc, h_comb_uc);
 
-  int Ts = 80;
+  int Ts = 168;
   int votes[dartboards.size()];
   weighBoxes(dartboards, votes, h_line_uc, h_circ_uc);
   filterBoxes(dartboards, votes, Ts, frame, filename);
@@ -137,10 +138,12 @@ int main(int argc, const char** argv)
 
 // ----------------------------------------------------------------------------
 
+/** @function filterBoxes */
 void filterBoxes(vector<Rect> &dartboards, int votes[], int Ts, Mat &frame, 
   string filename)
 {
   int count = 0;
+  
   for(int i = 0; i < dartboards.size(); i++) 
   {
     if(votes[i] > Ts)
@@ -148,19 +151,22 @@ void filterBoxes(vector<Rect> &dartboards, int votes[], int Ts, Mat &frame,
       rectangle(frame, Point(dartboards[i].x, dartboards[i].y), 
         Point(dartboards[i].x + dartboards[i].width, 
         dartboards[i].y + dartboards[i].height), Scalar(0, 255, 0), 2);
-      count++;
       
+      count++;   
     }
-    cout << "voteofbox " << votes[i] <<endl;
+    cout << "Vote for box: " << votes[i] <<endl;
   }
+  
   imwrite("out/" + filename + "_detected.jpg", frame);
   cout << "\nFiltered count: " << count << "\n" << endl;
 
 }
+
 // ----------------------------------------------------------------------------
 
 /** @function weighBoxes */
-void weighBoxes(vector<Rect> &dartboards, int votes[], Mat &hough_line, Mat &hough_circ)
+void weighBoxes(vector<Rect> &dartboards, int votes[], Mat &hough_line, 
+  Mat &hough_circ)
 {
   // Draw box around dartboards found
   //bool isDart = false;
@@ -173,7 +179,8 @@ void weighBoxes(vector<Rect> &dartboards, int votes[], Mat &hough_line, Mat &hou
   
 	for(int i = 0; i < dartboards.size(); i++)
 	{
-    pixNum = (dartboards[i].height*dartboards[i].width)/4; //central ninth of box
+    pixNum = (dartboards[i].height*dartboards[i].width)/4; //central 9th of box
+    
     for(int y = dartboards[i].y +(dartboards[i].height/4); y < dartboards[i].y 
       +(dartboards[i].height * 3/4); y++)
     {
@@ -187,8 +194,11 @@ void weighBoxes(vector<Rect> &dartboards, int votes[], Mat &hough_line, Mat &hou
         avgCirc += hough_circ.at<uchar>(y,x);
       }
     }
+    
     avgCirc = avgCirc/pixNum;
-    votes[i] = (maxLine*weightLine + avgCirc*weightCirc)/(weightCirc + weightLine);
+    votes[i] = (maxLine*weightLine + avgCirc*weightCirc)/(weightCirc 
+      + weightLine);
+      
     avgCirc = 0;
     maxLine = 0;
   }
@@ -760,5 +770,5 @@ string splitFilename(string str)
   return name;  
 }
 
-// ----------------------------------------------------------------------------
+// --- END OF FILE ------------------------------------------------------------
 
