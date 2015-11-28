@@ -270,6 +270,7 @@ void weighBoxes(vector<Rect> &dartboards, int votes[], Mat &hough_line, Mat &hou
       votes[i] = ( weightLine*maxLine + weightCirc*maxCirc + weightDist*weightedDist )/weightSum;
       
       //reinitialize variables for next iteration through rect vect
+      
 
     }
     else
