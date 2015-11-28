@@ -4,7 +4,8 @@
 // by Roland Baranyi and Kristian Krastev(rb12809, kk12742)
 //
 ///////////////////////////////////////////////////////////////////////////////
-
+//g++ dart.cpp /usr/local/opencv-2.4/lib/libopencv_core.so.2.4 /usr/local/lib/libopencv_highgui.so.2.4 /usr/local/lib/libopencv_imgproc.so.2.4 /usr/local/lib/libopencv_objdetect.so.2.4
+//
 // on Snowy, execute this command to compile:
 // g++ dart.cpp  /usr/local/opencv-2.4/lib/libopencv_core.so.2.4 
 //               /usr/local/opencv-2.4/lib/libopencv_highgui.so.2.4 
@@ -15,11 +16,11 @@
 // ./a.out images/tests/dart#.jpg, where # = 0 to 15
 
 // Header inclusion
-#include "/usr/local/opencv-2.4/include/opencv2/objdetect/objdetect.hpp"
-#include "/usr/local/opencv-2.4/include/opencv2/opencv.hpp"
-#include "/usr/local/opencv-2.4/include/opencv2/core/core.hpp"
-#include "/usr/local/opencv-2.4/include/opencv2/highgui/highgui.hpp"
-#include "/usr/local/opencv-2.4/include/opencv2/imgproc/imgproc.hpp"
+#include "/usr/local/include/opencv2/objdetect/objdetect.hpp"
+#include "/usr/local/include/opencv2/opencv.hpp"
+#include "/usr/local/include/opencv2/core/core.hpp"
+#include "/usr/local/include/opencv2/highgui/highgui.hpp"
+#include "/usr/local/include/opencv2/imgproc/imgproc.hpp"
 
 #include <iostream>
 #include <stdio.h>
@@ -31,14 +32,16 @@ using namespace cv;
 void detectAndDisplay(Mat frame_in, Mat &frame_out, vector<Rect> &dartboards);
 
 void gradient(Mat &inImage, Mat &outGradMag, Mat &outGradMag_uchar, 
-  Mat &outGradDir, Mat &outGradDir_uchar);
+  Mat &outGradDir, Mat &outGradDir_uchar, int Ts);
 
 void convolve(Mat &input, Mat &kernel, Mat &output, double *minSum, 
   double *maxSum);
 
 void normalise(Mat &convFloat, Mat &output, double *minSum, double *maxSum);
 
-void threshold(Mat &input);
+void threshold(Mat &input, int Ts);
+
+void threshold2 (Mat &input, int Ts);
 
 void gradMag(Mat &inDx, Mat &inDy, Mat &outMag, double *min, double *max);
 
@@ -90,7 +93,8 @@ int main(int argc, const char** argv)
  
   Mat grad_mag, grad_mag_uc;
   Mat grad_dir, grad_dir_uc;
-  gradient(frame, grad_mag, grad_mag_uc, grad_dir, grad_dir_uc);
+  int threshGradMag = 70;
+  gradient(frame, grad_mag, grad_mag_uc, grad_dir, grad_dir_uc, threshGradMag);
 
   int minRad = 3;
   int maxRad =(min(frame.cols, frame.rows)) / 2;
@@ -98,6 +102,8 @@ int main(int argc, const char** argv)
   Mat h_circ_uc;
   cout << "\nGenerating Hough Circle Transform..." << endl;
   houghCircle(grad_mag_uc, grad_dir, h_circ_uc, minRad, maxRad);
+  threshold2(h_circ_uc, 70);
+  imwrite("houghCircsThresh.png", h_circ_uc);
   
   //Mat h_circ_blur;
   //bilateralFilter(h_circ_uc, h_circ_blur, 9, 200, 200);
@@ -107,6 +113,8 @@ int main(int argc, const char** argv)
   cout << "Generating Hough Line Transform..." << endl;
   //houghLineDA(grad_mag_uc, grad_dir);
   houghLineXY(grad_mag_uc, grad_dir, h_line_uc);
+  threshold2(h_line_uc, 35);
+  imwrite("houghLinesThresh.png", h_line_uc);
   
   /*double kernelHP[3][3]= {
     {-1, -1, -1},
@@ -127,7 +135,8 @@ int main(int argc, const char** argv)
   //cout << "Generating Hough Combined Transform..." << endl;
   //houghCombine(h_circ_uc, h_line_uc, h_comb_uc);
 
-  int Ts = 80;
+  int Ts = 192;
+  cout << "\nThreshold: " << Ts << "\n" << endl;
   int votes[dartboards.size()];
   weighBoxes(dartboards, votes, h_line_uc, h_circ_uc);
   filterBoxes(dartboards, votes, Ts, frame, filename);
@@ -165,15 +174,29 @@ void weighBoxes(vector<Rect> &dartboards, int votes[], Mat &hough_line, Mat &hou
   // Draw box around dartboards found
   //bool isDart = false;
   //int count = 0;
-  int avgCirc = 0;
+  int maxCirc = 0;
+  Vector <Point> clusterMax;
+  int xCMu = 0;
+  int yCMu = 0;
+  
   int maxLine = 0;
+  Vector <Point> clusterMax2;
+  int xLMu = -1;
+  int yLMu = -1;
+  
   int weightCirc = 2;
-  int weightLine = 3;
-  int pixNum = 0; 
+  int weightLine = 1;
+  int weightDist = 3;
+  int weightSum = weightCirc + weightLine + weightDist;
+  int xC, yC = -1;
+  int xL, yL = -1;
+  int pixNum = 0;
+  int dist = 0;
+  int weightedDist = 0; 
   
 	for(int i = 0; i < dartboards.size(); i++)
 	{
-    pixNum = (dartboards[i].height*dartboards[i].width)/4; //central ninth of box
+    //pixNum = (dartboards[i].height*dartboards[i].width)/4; //central ninth of box
     for(int y = dartboards[i].y +(dartboards[i].height/4); y < dartboards[i].y 
       +(dartboards[i].height * 3/4); y++)
     {
@@ -181,16 +204,90 @@ void weighBoxes(vector<Rect> &dartboards, int votes[], Mat &hough_line, Mat &hou
         +(dartboards[i].width * 3/4); x++)
       {
         if(maxLine < hough_line.at<uchar>(y,x) )
+        {
           maxLine = hough_line.at<uchar>(y,x);
-        //if(maxCirc < hough_circ.at<uchar>(y,x) )
-          //maxCirc = hough_circ.at<uchar>(y,x);
-        avgCirc += hough_circ.at<uchar>(y,x);
+          xL = x;
+          yL = y;
+        }  
+        if(maxCirc < hough_circ.at<uchar>(y,x) )
+        {
+          maxCirc = hough_circ.at<uchar>(y,x);
+          xC = x;
+          yC = y;
+        }
       }
     }
-    avgCirc = avgCirc/pixNum;
-    votes[i] = (maxLine*weightLine + avgCirc*weightCirc)/(weightCirc + weightLine);
-    avgCirc = 0;
-    maxLine = 0;
+    
+    if ((maxLine>0) && (maxCirc>0))
+    {    
+      cout<<endl<<"First Max Coordinates: "<<xC<<" , "<<yC<<endl;
+      
+      for(int y = dartboards[i].y +(dartboards[i].height/4); y < dartboards[i].y 
+        +(dartboards[i].height * 3/4); y++)
+      {
+        for(int x = dartboards[i].x +(dartboards[i].width/4); x < dartboards[i].x
+          +(dartboards[i].width * 3/4); x++)
+        {  
+          if(hough_circ.at<uchar>(y,x) > (maxCirc-3) )
+          {
+            clusterMax.push_back(Point(y,x));
+            xCMu += x;
+            yCMu += y; 
+            //cout<<endl;cout<<endl;
+            //cout <<"Cluster coordinates: "<<clusterMax.back().x<<" , "<<clusterMax.back().y<<endl;
+            //cout<<endl<<"Accumulated coordinates: "<<xC<<" , "<<yC<<endl;
+            //cout<<endl;cout<<endl;
+          }
+          
+          if(hough_line.at<uchar>(y,x) == maxLine )
+          {
+            clusterMax2.push_back(Point(y,x));
+            xLMu += x;
+            yLMu += y; 
+          }
+        }
+      }
+      // get mean of cluster
+      xCMu = xCMu/clusterMax.size();
+      yCMu = yCMu/clusterMax.size();
+      
+      xLMu = xLMu/clusterMax2.size();
+      yLMu = yLMu/clusterMax2.size();
+      
+      cout<<endl<<"Mean Coords Hough Circles: "<<xCMu<<" , "<<yCMu<<endl;
+      cout<<"number of points in cluster HC: "<<clusterMax.size()<<endl;
+      cout<<endl<<"Mean Coords Hough Lines: "<<xLMu<<" , "<<yLMu<<endl;
+      cout<<"number of points in cluster HL: "<<clusterMax.size()<<endl;
+      
+      //compute distance between maximums in hough spaces
+      dist = sqrt((xLMu-xCMu)*(xLMu-xCMu) + (yLMu-yCMu)*(yLMu-yCMu)+1);
+      cout<<"xLMu yLMu   xCMu yCMu : "<<xLMu<<" "<<yLMu<<"   "<<xCMu<<" "<<yCMu<<endl;
+      
+      weightedDist = (int)(pow(255.0, 1.779)*( 1.0/(30.0*sqrt(2.0*M_PI)) * exp(-((dist-1)*(dist-1))/(2.0*900.0)) ));
+      cout << "weightedDist = "<< weightedDist <<endl;
+      cout<<endl;
+      //compute vote based on the 3 weighted features
+      votes[i] = ( weightLine*maxLine + weightCirc*maxCirc + weightDist*weightedDist )/weightSum;
+      
+      //reinitialize variables for next iteration through rect vect
+
+    }
+    else
+    {
+      votes[i] = 0;
+    }
+    
+     maxCirc = 0;
+     maxLine = 0;
+     xC = yC = xL = yL = -1;
+     xCMu = -1;
+     yCMu = -1;
+     xLMu = -1;
+     yLMu = -1;
+     dist = 0;
+     weightedDist = 0;
+     clusterMax.clear();
+     clusterMax2.clear();
   }
 }
 
@@ -220,7 +317,7 @@ void detectAndDisplay(Mat frame_in, Mat &frame_out, vector<Rect> &dartboards)
 
 /** @function gradient */
 void gradient(Mat &inImage, Mat &outGradMag, Mat &outGradMag_uchar, 
-  Mat &outGradDir, Mat &outGradDir_uchar)
+  Mat &outGradDir, Mat &outGradDir_uchar, int Ts)
 {
   Mat grayImage;
   cvtColor(inImage, grayImage, CV_BGR2GRAY);
@@ -263,7 +360,7 @@ void gradient(Mat &inImage, Mat &outGradMag, Mat &outGradMag_uchar,
   // Compute derivative with respect to(X,Y) - gradient magnitude
   gradMag(outDfDx_float, outDfDy_float, outGradMag, &minVal, &maxVal);
   normalise(outGradMag, outGradMag_uchar, &minVal, &maxVal);   
-  threshold(outGradMag_uchar);
+  threshold(outGradMag_uchar, Ts);
   imwrite("gradMag.png", outGradMag_uchar);
 
   // Compute gradient direction
@@ -287,7 +384,7 @@ void houghCircle(Mat &outDyDx_uchar, Mat &outGradDir, Mat &houghVis,
   // Initialize parameter space dynamically on dimension variables 
   int ***houghSpace;
   houghSpace = new int**[yD];
-  
+
   for(int y0 = 0; y0 < yD; y0++)
   {	
     houghSpace[y0] = new int*[xD];
@@ -310,10 +407,12 @@ void houghCircle(Mat &outDyDx_uchar, Mat &outGradDir, Mat &houghVis,
   // consider the pixels(y0,x0) in the image on the line of its gradient, and
   // if the distance(r) to such a pixel is within the range of radiuses, then
   // increment the votes for circle defined by(y0,x0,r) in the Hough Space
+
+  #pragma omp parallel for
   for(int y = 0; y < yD; y++)
-	{	
-		for(int x = 0; x < xD; x++)
-		{
+  {	
+    for(int x = 0; x < xD; x++)
+    {
       if(outDyDx_uchar.at<uchar>(y,x) == 255)
       {
         for(int x0 = 0; x0 < xD; x0++)
@@ -357,7 +456,7 @@ void houghCircle(Mat &outDyDx_uchar, Mat &outGradDir, Mat &houghVis,
   }
 
   houghVis.create(outDyDx_uchar.size(), outDyDx_uchar.type());
-  
+  #pragma omp parallel for
   for(int y0 = 0; y0 < yD; y0++)
   {
     for(int x0 = 0; x0 < xD; x0++)
@@ -412,7 +511,7 @@ void houghLineXY(Mat &gradMag, Mat &gradDir, Mat &houghVis)
   cout << "Hough Line array populated." << endl;
   
   houghVis.create(hLines.size(), CV_8U); 
-  
+  #pragma omp parallel for
   for(int y0 = 0; y0 < yD; y0++)
   {
     for(int x0 = 0; x0 < xD; x0++)
@@ -454,7 +553,7 @@ void houghCombine(Mat &hCircle, Mat &hLines, Mat &hCombined)
   cout << "Hough Combined array populated." << endl;
   
   hCombined.create(hLines.size(), CV_8U);
-
+  #pragma omp parallel for
   for(int y0 = 0; y0 < yD; y0++)
   {
     for(int x0 = 0; x0 < xD; x0++)
@@ -579,6 +678,7 @@ void convolve(Mat &input, Mat &kernel, Mat &output, double *minSum,
   double convFloat[input.rows][input.cols];
   
 	// now we can do the convoltion
+	#pragma omp parallel for
 	for(int y = 0; y < input.rows; y++)
 	{	
 		for(int x = 0; x < input.cols; x++)
@@ -691,16 +791,15 @@ void gradMag(Mat &inDx, Mat &inDy, Mat &outMag, double *min, double *max)
 // ----------------------------------------------------------------------------
 
 /** @function threshold */
-void threshold(Mat &input)
+void threshold(Mat &input, int Ts)
 {
   for(int y = 0; y < input.rows; y++)
   {	
     for(int x = 0; x < input.cols; x++)
     {
       uchar val = input.at<uchar>(y,x); 
-     
-      // val = 60     
-      if(val > 40)
+         
+      if(val > Ts)
       {
          input.at<uchar>(y,x) = 255;
       }
@@ -715,6 +814,23 @@ void threshold(Mat &input)
 
 // ----------------------------------------------------------------------------
 
+
+/** @function threshold */
+void threshold2 (Mat &input, int Ts)
+{
+  for(int y = 0; y < input.rows; y++)
+  {	
+    for(int x = 0; x < input.cols; x++)
+    {
+      if(input.at<uchar>(y,x) < Ts)
+      {
+         input.at<uchar>(y,x) = 0;
+      }    
+    }
+  }
+}
+
+// ----------------------------------------------------------------------------
 /** @function gradDir */
 void gradDir(Mat &inDx, Mat &inDy, Mat &outDir, double *min, double *max)
 {
