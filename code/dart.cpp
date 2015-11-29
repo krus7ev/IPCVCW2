@@ -4,8 +4,9 @@
 // by Roland Baranyi and Kristian Krastev(rb12809, kk12742)
 //
 ///////////////////////////////////////////////////////////////////////////////
+
 //g++ dart.cpp /usr/local/opencv-2.4/lib/libopencv_core.so.2.4 /usr/local/lib/libopencv_highgui.so.2.4 /usr/local/lib/libopencv_imgproc.so.2.4 /usr/local/lib/libopencv_objdetect.so.2.4
-//
+
 // on Snowy, execute this command to compile:
 // g++ dart.cpp  /usr/local/opencv-2.4/lib/libopencv_core.so.2.4 
 //               /usr/local/opencv-2.4/lib/libopencv_highgui.so.2.4 
@@ -58,10 +59,13 @@ void houghCombine(Mat &hCircle, Mat &hLines, Mat &hCombined);
 
 void houghLineDA(Mat &outGradMag_uchar, Mat &outGradDir);
 
-void weighBoxes(vector<Rect> &dartboards, int *votes, Mat &hough_line, Mat &hough_circ);
+void weighBoxes(vector<Rect> &dartboards, int votes[], Mat &hough_line, 
+  Mat &hough_circ, vector<Point3i> &boxMax);
 
-void filterBoxes(vector<Rect> &dartboards, int *votes, int Ts, Mat &frame, 
-  string filename);
+bool boxOverlap(Rect a, Rect b);
+
+void filterBoxes(vector<Rect> &dartboards, int votes[], int Ts, Mat &frame, 
+  string filename, vector<Point3i> &boxMax);
 
 string splitFilename(string str);
 
@@ -140,50 +144,110 @@ int main(int argc, const char** argv)
   int Ts = 158;
   cout << "\nThreshold: " << Ts << "\n" << endl;
   int votes[dartboards.size()];
-  weighBoxes(dartboards, votes, h_line_uc, h_circ_uc);
-  filterBoxes(dartboards, votes, Ts, frame, filename);
+  vector<Point3i> boxMax;
+  weighBoxes(dartboards, votes, h_line_uc, h_circ_uc, boxMax);
+  filterBoxes(dartboards, votes, Ts, frame, filename, boxMax);
   
 	return 0;
 }
 
 // ----------------------------------------------------------------------------
 
+/** @function filterBoxes */
 void filterBoxes(vector<Rect> &dartboards, int votes[], int Ts, Mat &frame, 
-  string filename)
+  string filename, vector<Point3i> &boxMax)
 {
+  vector<Rect> goodDarts;
+  vector<Point3i> goodBoxMax;
   int count = 0;
   for(int i = 0; i < dartboards.size(); i++) 
   {
     if(votes[i] > Ts)
     {
-      rectangle(frame, Point(dartboards[i].x, dartboards[i].y), 
-        Point(dartboards[i].x + dartboards[i].width, 
-        dartboards[i].y + dartboards[i].height), Scalar(0, 255, 0), 2);
-      count++;
-      
+      goodDarts.push_back(dartboards[i]);
+      goodBoxMax.push_back(boxMax[i]);  
+      cout<<"voteofbox: "<<votes[i]<<endl;  
     }
-    cout << "voteofbox " << votes[i] <<endl;
+  }
+ 
+  for(int i = 0; i < goodDarts.size(); i++) 
+  {
+    for( int j = i+1; j < goodDarts.size(); j++)
+    {
+      if( boxOverlap(goodDarts[i], goodDarts[j]) )
+      {
+        if (goodBoxMax[i].z == goodBoxMax[j].z)
+        {
+          int iCentX = goodDarts[i].x + goodDarts[i].width/2;
+          int iCentY = goodDarts[i].y + goodDarts[i].height/2;
+          int jCentX = goodDarts[j].x + goodDarts[j].width/2;
+          int jCentY = goodDarts[j].y + goodDarts[j].height/2;
+                             
+          int distI = sqrt((iCentX - goodBoxMax[i].x)*(iCentX-goodBoxMax[i].x)
+                         + (iCentY - goodBoxMax[i].y)*(iCentY-goodBoxMax[i].y));
+          
+          int distJ = sqrt((jCentX - goodBoxMax[j].x)*(jCentX-goodBoxMax[j].x)
+                         + (jCentY - goodBoxMax[j].y)*(jCentY-goodBoxMax[j].y));
+                         
+          
+          if (distI > distJ)
+          {
+            goodDarts[i] = goodDarts[j];
+          }
+          goodDarts.erase(goodDarts.begin() + j);
+          j--;              
+        }
+        else
+        {
+          if (goodBoxMax[i].z < goodBoxMax[j].z )
+          {
+            goodDarts[i] = goodDarts[j];
+          }
+          goodDarts.erase(goodDarts.begin() + j);
+          j--;       
+        }
+      
+      }
+    }
+  }
+  
+  for(int i = 0; i < goodDarts.size(); i++)
+  {
+    rectangle(frame, Point(goodDarts[i].x, goodDarts[i].y), 
+      Point(goodDarts[i].x + goodDarts[i].width, 
+      goodDarts[i].y + goodDarts[i].height), Scalar(0, 255, 0), 2); 
   }
   imwrite("out/" + filename + "_detected.jpg", frame);
-  cout << "\nFiltered count: " << count << "\n" << endl;
+  cout << "\nFiltered count: " << goodDarts.size() << "\n" << endl;
 
 }
+
+// ----------------------------------------------------------------------------
+
+/** @function boxOverlap */
+bool boxOverlap(Rect a, Rect b) 
+{
+  return (abs(a.x - b.x) * 2 < (a.width + b.width)) &&
+         (abs(a.y - b.y) * 2 < (a.height + b.height));
+}
+
 // ----------------------------------------------------------------------------
 
 /** @function weighBoxes */
-void weighBoxes(vector<Rect> &dartboards, int votes[], Mat &hough_line, Mat &hough_circ)
+void weighBoxes(vector<Rect> &dartboards, int votes[], Mat &hough_line, 
+  Mat &hough_circ, vector<Point3i> &boxMax)
 {
   int count = 0;
   int maxCirc = 0;
-  Vector <Point> clusterMax;
+  vector<Point> clusterMax;
   int xCMu = 0;
   int yCMu = 0;
   
   int maxLine = 0;
-  Vector <Point> clusterMax2;
+  vector<Point> clusterMax2;
   int xLMu = -1;
   int yLMu = -1;
-  
+    
   int weightCirc = 1;
   int weightLine = 3;
   int weightDist = 2;
@@ -196,7 +260,6 @@ void weighBoxes(vector<Rect> &dartboards, int votes[], Mat &hough_line, Mat &hou
   
 	for(int i = 0; i < dartboards.size(); i++)
 	{
-    //pixNum = (dartboards[i].height*dartboards[i].width)/4; //central ninth of box
     for(int y = dartboards[i].y +(dartboards[i].height/4); y < dartboards[i].y 
       +(dartboards[i].height * 3/4); y++)
     {
@@ -218,15 +281,17 @@ void weighBoxes(vector<Rect> &dartboards, int votes[], Mat &hough_line, Mat &hou
       }
     }
     
+    boxMax.push_back(Point3i(xL, yL, maxLine));
+    
     if ((maxLine>0) && (maxCirc>0))
     {    
       cout<<endl<<"First Max Coordinates: "<<xC<<" , "<<yC<<endl;
       
-      for(int y = dartboards[i].y +(dartboards[i].height/4); y < dartboards[i].y 
-        +(dartboards[i].height * 3/4); y++)
+      for(int y = dartboards[i].y +(dartboards[i].height/4); 
+        y < dartboards[i].y + (dartboards[i].height * 3/4); y++)
       {
-        for(int x = dartboards[i].x +(dartboards[i].width/4); x < dartboards[i].x
-          +(dartboards[i].width * 3/4); x++)
+        for(int x = dartboards[i].x +(dartboards[i].width/4); 
+          x < dartboards[i].x + (dartboards[i].width * 3/4); x++)
         {  
           if(hough_circ.at<uchar>(y,x) > (maxCirc-3) )
           {
@@ -261,13 +326,15 @@ void weighBoxes(vector<Rect> &dartboards, int votes[], Mat &hough_line, Mat &hou
       
       //compute distance between maximums in hough spaces
       dist = sqrt((xLMu-xCMu)*(xLMu-xCMu) + (yLMu-yCMu)*(yLMu-yCMu)+1);
-      cout<<"xLMu yLMu   xCMu yCMu : "<<xLMu<<" "<<yLMu<<"   "<<xCMu<<" "<<yCMu<<endl;
+      cout<<"xLMu yLMu xCMu yCMu:"<<xLMu<<" "<<yLMu<<" "<<xCMu<<" "<<yCMu<<endl;
       
-      weightedDist = (int)(pow(255.0, 1.779)*( 1.0/(30.0*sqrt(2.0*M_PI)) * exp(-((dist-1)*(dist-1))/(2.0*900.0)) ));
+      weightedDist = (int)(pow(255.0, 1.779)*( 1.0/(30.0*sqrt(2.0*M_PI)) * 
+        exp(-((dist-1)*(dist-1))/(2.0*900.0)) ));
       cout << "weightedDist = "<< weightedDist <<endl;
       cout<<endl;
       //compute vote based on the 3 weighted features
-      votes[i] = ( weightLine*maxLine + weightCirc*maxCirc + weightDist*weightedDist )/weightSum;
+      votes[i] = ( weightLine*maxLine + weightCirc*maxCirc + 
+        weightDist*weightedDist )/weightSum;
       
       //reinitialize variables for next iteration through rect vect
       
@@ -277,17 +344,17 @@ void weighBoxes(vector<Rect> &dartboards, int votes[], Mat &hough_line, Mat &hou
       votes[i] = 0;
     }
     
-     maxCirc = 0;
-     maxLine = 0;
-     xC = yC = xL = yL = -1;
-     xCMu = -1;
-     yCMu = -1;
-     xLMu = -1;
-     yLMu = -1;
-     dist = 0;
-     weightedDist = 0;
-     clusterMax.clear();
-     clusterMax2.clear();
+    maxCirc = 0;
+    maxLine = 0;
+    xC = yC = xL = yL = -1;
+    xCMu = -1;
+    yCMu = -1;
+    xLMu = -1;
+    yLMu = -1;
+    dist = 0;
+    weightedDist = 0;
+    clusterMax.clear();
+    clusterMax2.clear();
   }
 }
 
@@ -505,7 +572,7 @@ void houghLineXY(Mat &gradMag, Mat &gradDir, Mat &houghVis)
           
           if(y0 > 0 && y0 < yD)
           {
-            //Reward 10 times more voting points if last voting point's line
+            //Reward 40 times more voting points if last voting point's line
             //angle was at least 4 degrees away from this voting point's line
             //angle. This exploits let-to-right looping through rows. Angles
             //constants are in radians in the constraints below.
@@ -856,6 +923,7 @@ void threshold2 (Mat &input, int Ts)
 }
 
 // ----------------------------------------------------------------------------
+
 /** @function threshold */
 void threshold3 (Mat &input, int TsL, int TsH)
 {
@@ -877,6 +945,7 @@ void threshold3 (Mat &input, int TsL, int TsH)
 }
 
 // ----------------------------------------------------------------------------
+
 /** @function gradDir */
 void gradDir(Mat &inDx, Mat &inDy, Mat &outDir, double *min, double *max)
 {
