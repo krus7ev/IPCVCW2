@@ -43,6 +43,8 @@ void threshold(Mat &input, int Ts);
 
 void threshold2 (Mat &input, int Ts);
 
+void threshold3 (Mat &input, int TsL, int TsH);
+
 void gradMag(Mat &inDx, Mat &inDy, Mat &outMag, double *min, double *max);
 
 void gradDir(Mat &inDx, Mat &inDy, Mat &outDir, double *min, double *max);
@@ -93,7 +95,7 @@ int main(int argc, const char** argv)
  
   Mat grad_mag, grad_mag_uc;
   Mat grad_dir, grad_dir_uc;
-  int threshGradMag = 70;
+  int threshGradMag = 45;
   gradient(frame, grad_mag, grad_mag_uc, grad_dir, grad_dir_uc, threshGradMag);
 
   int minRad = 3;
@@ -102,7 +104,7 @@ int main(int argc, const char** argv)
   Mat h_circ_uc;
   cout << "\nGenerating Hough Circle Transform..." << endl;
   houghCircle(grad_mag_uc, grad_dir, h_circ_uc, minRad, maxRad);
-  threshold2(h_circ_uc, 70);
+  threshold2(h_circ_uc, 60);
   imwrite("houghCircsThresh.png", h_circ_uc);
   
   //Mat h_circ_blur;
@@ -113,7 +115,7 @@ int main(int argc, const char** argv)
   cout << "Generating Hough Line Transform..." << endl;
   //houghLineDA(grad_mag_uc, grad_dir);
   houghLineXY(grad_mag_uc, grad_dir, h_line_uc);
-  threshold2(h_line_uc, 35);
+  threshold3(h_line_uc, 35, 88);
   imwrite("houghLinesThresh.png", h_line_uc);
   
   /*double kernelHP[3][3]= {
@@ -135,7 +137,7 @@ int main(int argc, const char** argv)
   //cout << "Generating Hough Combined Transform..." << endl;
   //houghCombine(h_circ_uc, h_line_uc, h_comb_uc);
 
-  int Ts = 192;
+  int Ts = 158;
   cout << "\nThreshold: " << Ts << "\n" << endl;
   int votes[dartboards.size()];
   weighBoxes(dartboards, votes, h_line_uc, h_circ_uc);
@@ -171,9 +173,7 @@ void filterBoxes(vector<Rect> &dartboards, int votes[], int Ts, Mat &frame,
 /** @function weighBoxes */
 void weighBoxes(vector<Rect> &dartboards, int votes[], Mat &hough_line, Mat &hough_circ)
 {
-  // Draw box around dartboards found
-  //bool isDart = false;
-  //int count = 0;
+  int count = 0;
   int maxCirc = 0;
   Vector <Point> clusterMax;
   int xCMu = 0;
@@ -184,9 +184,9 @@ void weighBoxes(vector<Rect> &dartboards, int votes[], Mat &hough_line, Mat &hou
   int xLMu = -1;
   int yLMu = -1;
   
-  int weightCirc = 2;
-  int weightLine = 1;
-  int weightDist = 3;
+  int weightCirc = 1;
+  int weightLine = 3;
+  int weightDist = 2;
   int weightSum = weightCirc + weightLine + weightDist;
   int xC, yC = -1;
   int xL, yL = -1;
@@ -271,7 +271,6 @@ void weighBoxes(vector<Rect> &dartboards, int votes[], Mat &hough_line, Mat &hou
       
       //reinitialize variables for next iteration through rect vect
       
-
     }
     else
     {
@@ -474,9 +473,11 @@ void houghCircle(Mat &outDyDx_uchar, Mat &outGradDir, Mat &houghVis,
 //Applies and visualises a custom 2D Line Hough Space mapped to the image plane
 /** @function houghLineXY */
 void houghLineXY(Mat &gradMag, Mat &gradDir, Mat &houghVis)
+
 {
   // Initialize parameter space
   Mat hLines = Mat::zeros(gradMag.size(), CV_16U);
+  Mat lastVoteDir = Mat::zeros(gradDir.size(), CV_64F);
 
   cout << "Hough Line array initialised." << endl;
 
@@ -484,20 +485,43 @@ void houghLineXY(Mat &gradMag, Mat &gradDir, Mat &houghVis)
   int xD = hLines.cols;
   int max = 0;
   
-  for(int y = 0; y < yD; y++)
+  for(int y = 15; y < yD -15; y++)
   {	
-	  for(int x = 0; x < xD; x++)
+	  for(int x = 15; x < xD -15; x++)
 	  {
       if(gradMag.at<uchar>(y,x) == 255)
       {
-        for(int x0 = 0; x0 < xD; x0++)
-        {      
-          double tanGrad = tan(gradDir.at<double>(y,x) - M_PI/2);
-          int y0 =(int)(tanGrad*(x0-x) + y); //make some magic
+        for(int x0 = x-15; x0 < x+15; x0++)
+        { 
+          double Dir1 = gradDir.at<double>(y,x) - M_PI*0.5;        
+          
+          //Derrive y from x for the line equation (using tangens).
+          double tanDir = tan(Dir1);
+          int y0 =(int)(tanDir*(x0-x) + y);
+          
+          //Shift the Zero point on the trigonometric circle from the vertical
+          //to the horizontal axis.
+          double Dir = fmod(Dir1 + 1.5*M_PI, 2*M_PI);
           
           if(y0 > 0 && y0 < yD)
           {
-            hLines.at<ushort>(y0,x0)++;
+            //Reward 10 times more voting points if last voting point's line
+            //angle was at least 4 degrees away from this voting point's line
+            //angle. This exploits let-to-right looping through rows. Angles
+            //constants are in radians in the constraints below.
+            if ( ( (lastVoteDir.at<float>(y0,x0) > Dir + 0.069) 
+                && (lastVoteDir.at<float>(y0,x0) < Dir + 3.072) ) 
+              || ( (lastVoteDir.at<float>(y0,x0) < Dir - 0.069) 
+                && (lastVoteDir.at<float>(y0,x0) > Dir - 3.072) ) )
+            {
+                hLines.at<ushort>(y0,x0) += 40;            
+            }
+            else
+            {
+              hLines.at<ushort>(y0,x0)++;
+            }
+            
+            lastVoteDir.at<float>(y0,x0) = Dir;
             
             if(hLines.at<ushort>(y0,x0) > max)
             {
@@ -832,6 +856,27 @@ void threshold2 (Mat &input, int Ts)
 }
 
 // ----------------------------------------------------------------------------
+/** @function threshold */
+void threshold3 (Mat &input, int TsL, int TsH)
+{
+  for(int y = 0; y < input.rows; y++)
+  {	
+    for(int x = 0; x < input.cols; x++)
+    {
+      if(input.at<uchar>(y,x) < TsL)
+      {
+         input.at<uchar>(y,x) = 0;
+      } 
+      if(input.at<uchar>(y,x) > TsH)
+      {
+         if(input.at<uchar>(y,x) < 215)
+            input.at<uchar>(y,x) += 40;
+      }   
+    }
+  }
+}
+
+// ----------------------------------------------------------------------------
 /** @function gradDir */
 void gradDir(Mat &inDx, Mat &inDy, Mat &outDir, double *min, double *max)
 {
@@ -847,7 +892,7 @@ void gradDir(Mat &inDx, Mat &inDy, Mat &outDir, double *min, double *max)
       double pDx = inDx.at<double>(y,x);
       double pDy = inDy.at<double>(y,x);
 
-      double val = atan2(pDx, pDy) + M_PI/2; //Fi+pi/2 in radians
+      double val = atan2(pDx, pDy) + 1.5*M_PI; //Fi+pi/2 in radians
 
       if(val < *min)
       {
