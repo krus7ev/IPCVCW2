@@ -17,11 +17,19 @@
 // ./a.out images/tests/dart#.jpg, where # = 0 to 15
 
 // Header inclusion
+/*
 #include "/usr/local/include/opencv2/objdetect/objdetect.hpp"
 #include "/usr/local/include/opencv2/opencv.hpp"
 #include "/usr/local/include/opencv2/core/core.hpp"
 #include "/usr/local/include/opencv2/highgui/highgui.hpp"
 #include "/usr/local/include/opencv2/imgproc/imgproc.hpp"
+*/
+
+#include "/usr/local/opencv-2.4/include/opencv2/objdetect/objdetect.hpp"
+#include "/usr/local/opencv-2.4/include/opencv2/opencv.hpp"
+#include "/usr/local/opencv-2.4/include/opencv2/core/core.hpp"
+#include "/usr/local/opencv-2.4/include/opencv2/highgui/highgui.hpp"
+#include "/usr/local/opencv-2.4/include/opencv2/imgproc/imgproc.hpp"
 
 #include <iostream>
 #include <stdio.h>
