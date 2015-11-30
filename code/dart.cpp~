@@ -128,7 +128,7 @@ int main(int argc, const char** argv)
   //cout << "Generating Hough Combined Transform..." << endl;
   //houghCombine(h_circ_uc, h_line_uc, h_comb_uc);
 
-  int Ts = 168;
+  int Ts = 149;
   int votes[dartboards.size()];
   weighBoxes(dartboards, votes, h_line_uc, h_circ_uc);
   filterBoxes(dartboards, votes, Ts, frame, filename);

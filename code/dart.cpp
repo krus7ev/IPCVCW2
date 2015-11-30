@@ -21,6 +21,7 @@
 #include "/usr/local/opencv-2.4/include/opencv2/highgui/highgui.hpp"
 #include "/usr/local/opencv-2.4/include/opencv2/imgproc/imgproc.hpp"
 
+
 #include <iostream>
 #include <stdio.h>
 
